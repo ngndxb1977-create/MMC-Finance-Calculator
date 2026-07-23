@@ -1040,6 +1040,7 @@ def generate_html_report(
                     <li>Current Dated Salary Certificate from The Employer.</li>
                     <li>Pay Slips For The Last 3 Months (Or 6 Months For Commission-Based Income).</li>
                     <li>Latest 3 to 6 Months Personal Bank Statement showing Salary Credits.</li>
+                    <li>IBAN .</li>
                 </ul>
                 <p style="font-size: 11px; color: #555; margin-top: 10px;">
                     <strong>Disclaimer:</strong> All calculations, rates, and figures provided by this matrix calculator are for estimation purposes only and subject to formal bank approval, final credit evaluation, and prevailing regulatory changes in the UAE.
