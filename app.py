@@ -74,6 +74,15 @@ h2, h3, h4, h5, h6 {
     margin-top: 0.5rem;
     line-height: 1.4;
 }
+
+/* Force exact colors when printing directly from Streamlit view */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}
 </style>
 """,
     unsafe_allow_html=True
@@ -610,10 +619,18 @@ elif st.session_state.view_state == "summary":
 <title>Mitsubishi Financial Matrix Report</title>
 <style>
 @import url('https://fonts.googleapis.com/css?family=Quicksand:wght@600;700&family=Amethysta&display=swap');
+
+/* Forces background colors and images when saving to PDF/Printing */
+* {{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+}}
+
 body {{
     font-family: 'Amethysta', serif;
-    color: #191919;
-    background-color: #FFFFFF;
+    color: #191919 !important;
+    background-color: #FFFFFF !important;
     padding: 20px;
     line-height: 1.5;
 }}
@@ -626,12 +643,12 @@ h1 {{
     font-family: 'Quicksand', sans-serif;
     font-size: 26px;
     margin: 0 0 5px 0;
-    color: #191919;
+    color: #191919 !important;
 }}
 h2 {{
     font-family: 'Quicksand', sans-serif;
     font-size: 18px;
-    color: #383838;
+    color: #383838 !important;
     margin: 20px 0 10px 0;
     border-bottom: 1px solid #DDD;
     padding-bottom: 5px;
@@ -639,7 +656,7 @@ h2 {{
 h3 {{
     font-family: 'Quicksand', sans-serif;
     font-size: 15px;
-    color: #555555;
+    color: #555555 !important;
     margin: 15px 0 8px 0;
 }}
 .top-container {{
@@ -660,21 +677,22 @@ h3 {{
 }}
 .card {{
     flex: 1;
-    background: #F4F0EA;
+    background-color: #F4F0EA !important;
     padding: 12px 15px;
     border-radius: 6px;
-    border-left: 4px solid #191919;
+    border-left: 4px solid #191919 !important;
 }}
 .card-label {{
     font-family: 'Quicksand', sans-serif;
     font-size: 11px;
     text-transform: uppercase;
-    color: #555;
+    color: #555555 !important;
     font-weight: 700;
 }}
 .card-value {{
     font-size: 18px;
     font-weight: bold;
+    color: #191919 !important;
     margin-top: 5px;
 }}
 table {{
@@ -689,15 +707,16 @@ th, td {{
     text-align: left;
 }}
 th {{
-    background-color: #F4F0EA;
+    background-color: #F4F0EA !important;
+    color: #191919 !important;
     font-family: 'Quicksand', sans-serif;
     font-weight: 700;
 }}
 .cash-box {{
-    background-color: #F4F0EA;
+    background-color: #F4F0EA !important;
     padding: 15px;
     border-radius: 6px;
-    border-left: 4px solid #191919;
+    border-left: 4px solid #191919 !important;
     margin-top: 15px;
 }}
 .cash-title {{
@@ -705,18 +724,19 @@ th {{
     font-weight: 700;
     font-size: 12px;
     text-transform: uppercase;
-    color: #555;
+    color: #555555 !important;
 }}
 .cash-val {{
     font-size: 24px;
     font-weight: bold;
+    color: #191919 !important;
     margin-top: 5px;
 }}
 .checklist {{
-    background-color: #F4F0EA;
+    background-color: #F4F0EA !important;
     padding: 15px 20px;
     border-radius: 6px;
-    border-left: 4px solid #191919;
+    border-left: 4px solid #191919 !important;
     font-size: 12px;
 }}
 .checklist ul {{
@@ -724,8 +744,8 @@ th {{
     padding-left: 20px;
 }}
 .print-btn {{
-    background-color: #191919;
-    color: white;
+    background-color: #191919 !important;
+    color: #FFFFFF !important;
     padding: 10px 20px;
     border: none;
     border-radius: 5px;
@@ -735,7 +755,7 @@ th {{
     margin-bottom: 20px;
 }}
 @media print {{
-    .no-print {{ display: none; }}
+    .no-print {{ display: none !important; }}
     body {{ padding: 0; }}
 }}
 </style>
