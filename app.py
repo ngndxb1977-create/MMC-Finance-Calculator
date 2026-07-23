@@ -1,13 +1,15 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import os
-import io
-import re
 import base64
+import io
+import os
+import re
+import numpy as np
+import pandas as pd
+import streamlit as st
 
 # Set configuration at the absolute top
-st.set_page_config(page_title="Mitsubishi Financial Matrix Calculator", layout="wide")
+st.set_page_config(
+    page_title="Mitsubishi Financial Matrix Calculator", layout="wide"
+)
 
 # ==========================================
 # CUSTOM UX/UI STYLING ENGINE
@@ -15,7 +17,7 @@ st.set_page_config(page_title="Mitsubishi Financial Matrix Calculator", layout="
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Karma:wght=400;600&family=Amethysta&family=Quicksand:wght=500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Karma:wght@400;600&family=Amethysta&family=Quicksand:wght=500;700&display=swap');
 
     .stApp {
         background-color: #FBF9F6 !important;
@@ -83,226 +85,319 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
+
 def get_clean_model_name(raw_name):
-    raw_name_upper = raw_name.upper()
-    if 'ATTRAGE' in raw_name_upper or 'ATG' in raw_name_upper: return 'Attrage'
-    elif 'MIRAGE' in raw_name_upper or 'MIG' in raw_name_upper: return 'Mirage'
-    elif 'ASX' in raw_name_upper: return 'ASX'
-    elif 'ECLIPSE' in raw_name_upper: return 'Eclipse Cross'
-    elif 'XPANDER' in raw_name_upper: return 'Xpander'
-    elif 'OUTLANDER' in raw_name_upper: return 'Outlander'
-    elif 'MONTERO' in raw_name_upper: return 'Montero Sport'
-    elif 'DESTINATOR' in raw_name_upper or 'DST' in raw_name_upper or 'DES' in raw_name_upper: return 'Destinator'
-    return raw_name
+  raw_name_upper = raw_name.upper()
+  if "ATTRAGE" in raw_name_upper or "ATG" in raw_name_upper:
+    return "Attrage"
+  elif "MIRAGE" in raw_name_upper or "MIG" in raw_name_upper:
+    return "Mirage"
+  elif "ASX" in raw_name_upper:
+    return "ASX"
+  elif "ECLIPSE" in raw_name_upper:
+    return "Eclipse Cross"
+  elif "XPANDER" in raw_name_upper:
+    return "Xpander"
+  elif "OUTLANDER" in raw_name_upper:
+    return "Outlander"
+  elif "MONTERO" in raw_name_upper:
+    return "Montero Sport"
+  elif (
+      "DESTINATOR" in raw_name_upper
+      or "DST" in raw_name_upper
+      or "DES" in raw_name_upper
+  ):
+    return "Destinator"
+  return raw_name
+
 
 def normalize_bracket_string(raw_val):
-    if not raw_val or pd.isna(raw_val):
-        return ""
-    val = str(raw_val).strip().replace(",", "")
-    val = re.sub(r'\s+', '', val)  
-    val = val.replace("to", "-").replace("—", "-").replace("–", "-")
-    return val
+  if not raw_val or pd.isna(raw_val):
+    return ""
+  val = str(raw_val).strip().replace(",", "")
+  val = re.sub(r"\s+", "", val)
+  val = val.replace("to", "-").replace("—", "-").replace("–", "-")
+  return val
+
 
 def get_image_base64(image_path):
-    """Encodes image to Base64 so it prints reliably in standalone PDF/HTML reports."""
-    if image_path and os.path.exists(image_path):
-        with open(image_path, "rb") as image_file:
-            encoded_string = base64.b64encode(image_file.read()).decode()
-            ext = os.path.splitext(image_path)[1].lower().replace('.', '')
-            mime_type = "image/jpeg" if ext in ["jpg", "jpeg"] else "image/png"
-            return f"data:{mime_type};base64,{encoded_string}"
-    return None
+  """Encodes image to Base64 so it prints reliably in standalone PDF/HTML reports."""
+  if image_path and os.path.exists(image_path):
+    with open(image_path, "rb") as image_file:
+      encoded_string = base64.b64encode(image_file.read()).decode()
+      ext = os.path.splitext(image_path)[1].lower().replace(".", "")
+      mime_type = "image/jpeg" if ext in ["jpg", "jpeg"] else "image/png"
+      return f"data:{mime_type};base64,{encoded_string}"
+  return None
+
 
 # ------------------------------------------------------------------
 # MASTER EXCEL EXTRACTION ENGINE
 # ------------------------------------------------------------------
 @st.cache_data
 def load_external_accessories_catalog(file_path):
-    """
-    Loads full accessories catalog (63+ items) from an external Excel file.
-    Expected Columns: 'Accessory Name', 'Price', 'VAT Applicable' (Optional, defaults to YES)
-    """
-    accessories_dict = {}
-    if os.path.exists(file_path):
+  """Loads full accessories catalog (63+ items) from an external Excel file.
+
+  Expected Columns: 'Accessory Name', 'Price', 'VAT Applicable' (Optional,
+  defaults to YES)
+  """
+  accessories_dict = {}
+  if os.path.exists(file_path):
+    try:
+      df = pd.read_excel(file_path)
+      for _, row in df.iterrows():
+        col_name = next(
+            (
+                c
+                for c in df.columns
+                if "NAME" in c.upper()
+                or "ACCESSORY" in c.upper()
+                or "ITEM" in c.upper()
+            ),
+            df.columns[0],
+        )
+        col_price = next(
+            (
+                c
+                for c in df.columns
+                if "PRICE" in c.upper()
+                or "COST" in c.upper()
+                or "AMOUNT" in c.upper()
+            ),
+            df.columns[1] if len(df.columns) > 1 else None,
+        )
+        col_vat = next(
+            (c for c in df.columns if "VAT" in c.upper() or "TAX" in c.upper()),
+            None,
+        )
+
+        item_name = str(row[col_name]).strip()
+        if not item_name or item_name.lower() == "nan":
+          continue
+
         try:
-            df = pd.read_excel(file_path)
-            for _, row in df.iterrows():
-                # Flexible column matching
-                col_name = next((c for c in df.columns if 'NAME' in c.upper() or 'ACCESSORY' in c.upper() or 'ITEM' in c.upper()), df.columns[0])
-                col_price = next((c for c in df.columns if 'PRICE' in c.upper() or 'COST' in c.upper() or 'AMOUNT' in c.upper()), df.columns[1] if len(df.columns) > 1 else None)
-                col_vat = next((c for c in df.columns if 'VAT' in c.upper() or 'TAX' in c.upper()), None)
+          price = float(row[col_price]) if col_price else 0.0
+        except (ValueError, TypeError):
+          price = 0.0
 
-                item_name = str(row[col_name]).strip()
-                if not item_name or item_name.lower() == 'nan':
-                    continue
+        is_vat = True
+        if col_vat and pd.notna(row[col_vat]):
+          vat_str = str(row[col_vat]).strip().upper()
+          if vat_str in ["NO", "FALSE", "0", "EXEMPT", "N"]:
+            is_vat = False
 
-                try:
-                    price = float(row[col_price]) if col_price else 0.0
-                except (ValueError, TypeError):
-                    price = 0.0
+        accessories_dict[item_name] = {"price": price, "vat_taxable": is_vat}
+    except Exception as e:
+      st.sidebar.error(f"Error loading accessories list ({file_path}): {e}")
+  return accessories_dict
 
-                is_vat = True
-                if col_vat and pd.notna(row[col_vat]):
-                    vat_str = str(row[col_vat]).strip().upper()
-                    if vat_str in ['NO', 'FALSE', '0', 'EXEMPT', 'N']:
-                        is_vat = False
-
-                accessories_dict[item_name] = {
-                    "price": price,
-                    "vat_taxable": is_vat
-                }
-        except Exception as e:
-            st.sidebar.error(f"Error loading accessories list ({file_path}): {e}")
-    return accessories_dict
 
 @st.cache_data
 def load_supplementary_data(file_path):
-    bank_data = {}
-    rmc_data = {}
-    if os.path.exists(file_path):
+  bank_data = {}
+  rmc_data = {}
+  if os.path.exists(file_path):
+    try:
+      df_bank = pd.read_excel(file_path, sheet_name="Bank Details", header=None)
+      for _, row in df_bank.iterrows():
         try:
-            df_bank = pd.read_excel(file_path, sheet_name='Bank Details', header=None)
-            for _, row in df_bank.iterrows():
-                try:
-                    bank_name = ""
-                    start_col = 1
-                    ignore_headers = ["S.NO", "S. NO", "SR NO", "SR. NO", "SL NO", "SL. NO", "SERIAL", "#"]
-                    for i in range(4):
-                        if i >= len(row): break
-                        val = str(row.iloc[i]).strip()
-                        if val and val.lower() != "nan" and not val.replace('.', '', 1).isdigit():
-                            if val.upper() not in ignore_headers:
-                                bank_name = val
-                                start_col = i + 1  
-                                break
-                    if not bank_name or "BANK NAME" in bank_name.upper(): 
-                        continue
-                    if bank_name not in bank_data:
-                        bank_data[bank_name] = {}
-                    num_cols = len(row)
-                    for col_idx in range(start_col, num_cols):
-                        cell_val = row.iloc[col_idx]
-                        if pd.isna(cell_val) or str(cell_val).strip() == "":
-                            continue
-                        cell_str = str(cell_val).strip()
-                        is_salary_pattern = re.search(r'\d+', cell_str) is not None and any(x in cell_str.lower() for x in ['-', 'to', '+', 'above', 'k', 'min'])
-                        if is_salary_pattern:
-                            for look_ahead in range(1, 3):
-                                if col_idx + look_ahead < num_cols:
-                                    next_val = row.iloc[col_idx + look_ahead]
-                                    if pd.notna(next_val) and str(next_val).strip() != "":
-                                        try:
-                                            roi_str = str(next_val).replace("%", "").strip()
-                                            parsed_roi = float(roi_str)
-                                            if parsed_roi > 1.0:
-                                                parsed_roi = parsed_roi / 100.0
-                                            norm_sb_val = normalize_bracket_string(cell_val)
-                                            if "-" in norm_sb_val:
-                                                parts = norm_sb_val.split("-")
-                                                display_label = f"{parts[0]}-{parts[1]}"
-                                            else:
-                                                display_label = norm_sb_val
-                                            bank_data[bank_name][display_label] = parsed_roi
-                                            break 
-                                        except:
-                                            continue
-                except:
-                    continue
-        except Exception as e:
-            st.error(f"Critical error initializing Bank Details sheet: {e}")
-
-        try:
-            df_rmc = pd.read_excel(file_path, sheet_name='RMC')
-            for _, row in df_rmc.iterrows():
-                v_code = str(row['Variant Codes']).strip()
-                if not v_code or v_code == "nan": continue
-                rmc_data[v_code] = {
-                    "RMC-10-40": float(row['RMC-10-40']) if pd.notna(row['RMC-10-40']) else 0.0,
-                    "RMC-10-60": float(row['RMC-10-60']) if pd.notna(row['RMC-10-60']) else 0.0,
-                    "RMC-10-70": float(row['RMC-10-70']) if pd.notna(row['RMC-10-70']) else 0.0,
-                    "RMC-10-100": float(row['RMC-10-100']) if pd.notna(row['RMC-10-100']) else 0.0,
-                }
+          bank_name = ""
+          start_col = 1
+          ignore_headers = [
+              "S.NO",
+              "S. NO",
+              "SR NO",
+              "SR. NO",
+              "SL NO",
+              "SL. NO",
+              "SERIAL",
+              "#",
+          ]
+          for i in range(4):
+            if i >= len(row):
+              break
+            val = str(row.iloc[i]).strip()
+            if (
+                val
+                and val.lower() != "nan"
+                and not val.replace(".", "", 1).isdigit()
+            ):
+              if val.upper() not in ignore_headers:
+                bank_name = val
+                start_col = i + 1
+                break
+          if not bank_name or "BANK NAME" in bank_name.upper():
+            continue
+          if bank_name not in bank_data:
+            bank_data[bank_name] = {}
+          num_cols = len(row)
+          for col_idx in range(start_col, num_cols):
+            cell_val = row.iloc[col_idx]
+            if pd.isna(cell_val) or str(cell_val).strip() == "":
+              continue
+            cell_str = str(cell_val).strip()
+            is_salary_pattern = (
+                re.search(r"\d+", cell_str) is not None
+                and any(
+                    x in cell_str.lower() for x in ["-", "to", "+", "above", "k"]
+                )
+            )
+            if is_salary_pattern:
+              for look_ahead in range(1, 3):
+                if col_idx + look_ahead < num_cols:
+                  next_val = row.iloc[col_idx + look_ahead]
+                  if pd.notna(next_val) and str(next_val).strip() != "":
+                    try:
+                      roi_str = str(next_val).replace("%", "").strip()
+                      parsed_roi = float(roi_str)
+                      if parsed_roi > 1.0:
+                        parsed_roi = parsed_roi / 100.0
+                      norm_sb_val = normalize_bracket_string(cell_val)
+                      if "-" in norm_sb_val:
+                        parts = norm_sb_val.split("-")
+                        display_label = f"{parts[0]}-{parts[1]}"
+                      else:
+                        display_label = norm_sb_val
+                      bank_data[bank_name][display_label] = parsed_roi
+                      break
+                    except:
+                      continue
         except:
-            pass
-    return bank_data, rmc_data
+          continue
+    except Exception as e:
+      st.error(f"Critical error initializing Bank Details sheet: {e}")
+
+    try:
+      df_rmc = pd.read_excel(file_path, sheet_name="RMC")
+      for _, row in df_rmc.iterrows():
+        v_code = str(row["Variant Codes"]).strip()
+        if not v_code or v_code == "nan":
+          continue
+        rmc_data[v_code] = {
+            "RMC-10-40": (
+                float(row["RMC-10-40"]) if pd.notna(row["RMC-10-40"]) else 0.0
+            ),
+            "RMC-10-60": (
+                float(row["RMC-10-60"]) if pd.notna(row["RMC-10-60"]) else 0.0
+            ),
+            "RMC-10-70": (
+                float(row["RMC-10-70"]) if pd.notna(row["RMC-10-70"]) else 0.0
+            ),
+            "RMC-10-100": (
+                float(row["RMC-10-100"]) if pd.notna(row["RMC-10-100"]) else 0.0
+            ),
+        }
+    except:
+      pass
+  return bank_data, rmc_data
+
 
 @st.cache_data
 def load_all_vehicle_data(vehicle_file_path):
-    catalog = {"2025": {}, "2026": {}}
-    if not os.path.exists(vehicle_file_path):
-        return catalog
-
-    xls = pd.ExcelFile(vehicle_file_path)
-    for sheet in xls.sheet_names:
-        if sheet.strip() in ['Structure', 'Bank Details', 'RMC'] or 'COMBINED' in sheet.upper(): 
-            continue
-        try:
-            df = pd.read_excel(xls, sheet_name=sheet, header=None)
-            
-            raw_name = str(df.iloc[4, 2]).strip()
-            code = str(df.iloc[4, 3]).strip()
-            year_string = str(df.iloc[4, 4]).strip()
-            
-            if not raw_name or raw_name == "nan": raw_name = sheet
-            if not code or code == "nan": code = sheet
-            
-            year_key = "2026" if "2026" in year_string or "26" in sheet else "2025"
-            
-            base_price = float(df.iloc[6, 1])          
-            interest_rate = float(df.iloc[18, 3])  
-            
-            registration_fee = float(df.iloc[11, 7]) if pd.notna(df.iloc[11, 7]) else 600.0
-            processing_fee_dp = float(df.iloc[12, 7]) if pd.notna(df.iloc[12, 7]) else 315.0
-            
-            model_name = get_clean_model_name(raw_name)
-            sheet_upper = sheet.upper()
-            
-            if model_name in ['Attrage', 'Mirage'] or 'MIG' in sheet_upper or 'ATG' in sheet_upper or 'MOP' in sheet_upper or 'MOG' in sheet_upper:
-                reservation_fee = 500.0
-            else:
-                reservation_fee = 1000.0
-
-            accessories = {}
-            row_labels = {
-                10: "Custom Accessories", 11: "Ceramic Gold Window Tint", 12: "FO PPF Gold Package",
-                13: "Extended Warranty", 14: "VRI", 15: "Vehicle Insurance", 16: "RMC"
-            }
-            
-            for row_idx, default_label in row_labels.items():
-                cell_label = str(df.iloc[row_idx - 1, 1]).strip()
-                status = str(df.iloc[row_idx - 1, 2]).strip().upper()
-                label = cell_label if (cell_label and cell_label != "nan") else default_label
-                is_checked = (status == "YES")
-                try:
-                    price_val = float(df.iloc[row_idx - 1, 3])
-                except:
-                    price_val = 0.0
-                
-                accessories[label] = {
-                    "price_raw": price_val,
-                    "default_checked": is_checked,
-                    "type_tag": "VRI" if row_idx == 14 else ("INSURANCE" if row_idx == 15 else ("RMC" if row_idx == 16 else "STANDARD"))
-                }
-            
-            if model_name not in catalog[year_key]: 
-                catalog[year_key][model_name] = {}
-                
-            catalog[year_key][model_name][code] = {
-                "base_price": base_price, 
-                "interest_rate": interest_rate, 
-                "accessories": accessories,
-                "registration_fee": registration_fee,
-                "processing_fee_dp": processing_fee_dp,
-                "reservation_fee": reservation_fee
-            }
-        except: 
-            continue
+  catalog = {"2025": {}, "2026": {}}
+  if not os.path.exists(vehicle_file_path):
     return catalog
 
-FILE_VEHICLES = "NFC New VRI Project (2) (2).xlsx"  
+  xls = pd.ExcelFile(vehicle_file_path)
+  for sheet in xls.sheet_names:
+    if (
+        sheet.strip() in ["Structure", "Bank Details", "RMC"]
+        or "COMBINED" in sheet.upper()
+    ):
+      continue
+    try:
+      df = pd.read_excel(xls, sheet_name=sheet, header=None)
+
+      raw_name = str(df.iloc[4, 2]).strip()
+      code = str(df.iloc[4, 3]).strip()
+      year_string = str(df.iloc[4, 4]).strip()
+
+      if not raw_name or raw_name == "nan":
+        raw_name = sheet
+      if not code or code == "nan":
+        code = sheet
+
+      year_key = "2026" if "2026" in year_string or "26" in sheet else "2025"
+
+      base_price = float(df.iloc[6, 1])
+      interest_rate = float(df.iloc[18, 3])
+
+      registration_fee = (
+          float(df.iloc[11, 7]) if pd.notna(df.iloc[11, 7]) else 600.0
+      )
+      processing_fee_dp = (
+          float(df.iloc[12, 7]) if pd.notna(df.iloc[12, 7]) else 315.0
+      )
+
+      model_name = get_clean_model_name(raw_name)
+      sheet_upper = sheet.upper()
+
+      if (
+          model_name in ["Attrage", "Mirage"]
+          or "MIG" in sheet_upper
+          or "ATG" in sheet_upper
+          or "MOP" in sheet_upper
+          or "MOG" in sheet_upper
+      ):
+        reservation_fee = 500.0
+      else:
+        reservation_fee = 1000.0
+
+      accessories = {}
+      row_labels = {
+          10: "Custom Accessories",
+          11: "Ceramic Gold Window Tint",
+          12: "FO PPF Gold Package",
+          13: "Extended Warranty",
+          14: "VRI",
+          15: "Vehicle Insurance",
+          16: "RMC",
+      }
+
+      for row_idx, default_label in row_labels.items():
+        cell_label = str(df.iloc[row_idx - 1, 1]).strip()
+        status = str(df.iloc[row_idx - 1, 2]).strip().upper()
+        label = cell_label if (cell_label and cell_label != "nan") else default_label
+        is_checked = status == "YES"
+        try:
+          price_val = float(df.iloc[row_idx - 1, 3])
+        except:
+          price_val = 0.0
+
+        accessories[label] = {
+            "price_raw": price_val,
+            "default_checked": is_checked,
+            "type_tag": (
+                "VRI"
+                if row_idx == 14
+                else (
+                    "INSURANCE"
+                    if row_idx == 15
+                    else ("RMC" if row_idx == 16 else "STANDARD")
+                )
+            ),
+        }
+
+      if model_name not in catalog[year_key]:
+        catalog[year_key][model_name] = {}
+
+      catalog[year_key][model_name][code] = {
+          "base_price": base_price,
+          "interest_rate": interest_rate,
+          "accessories": accessories,
+          "registration_fee": registration_fee,
+          "processing_fee_dp": processing_fee_dp,
+          "reservation_fee": reservation_fee,
+      }
+    except:
+      continue
+  return catalog
+
+
+FILE_VEHICLES = "NFC New VRI Project (2) (2).xlsx"
 FILE_SUPPLEMENT = "Bank & RMC Details.xlsx"
 FILE_ACCESSORIES_CATALOG = "Accessories_List.xlsx"
 
@@ -318,337 +413,528 @@ VEHICLE_IMAGES = {
     "Xpander Cross": "xpander_cross.png.png",
     "Outlander": "outlander.png.png",
     "Montero Sport": "montero.png.png",
-    "Destinator": "destinator.png.png"
+    "Destinator": "destinator.png.png",
 }
 
+
 def find_valid_image_path(filename):
-    possible_paths = [
-        os.path.join("images", filename),
-        os.path.join("Images", filename),
-        os.path.join("images", filename.replace(".png.png", ".PNG.PNG")),
-        os.path.join("Images", filename.replace(".png.png", ".PNG.PNG")),
-        filename
-    ]
-    for path in possible_paths:
-        if os.path.exists(path):
-            return path
-    return None
+  possible_paths = [
+      os.path.join("images", filename),
+      os.path.join("Images", filename),
+      os.path.join("images", filename.replace(".png.png", ".PNG.PNG")),
+      os.path.join("Images", filename.replace(".png.png", ".PNG.PNG")),
+      filename,
+  ]
+  for path in possible_paths:
+    if os.path.exists(path):
+      return path
+  return None
+
 
 VEHICLE_CATALOG = load_all_vehicle_data(FILE_VEHICLES)
 BANK_RULES, RMC_RULES = load_supplementary_data(FILE_SUPPLEMENT)
-EXTERNAL_ACCESSORIES = load_external_accessories_catalog(FILE_ACCESSORIES_CATALOG)
+EXTERNAL_ACCESSORIES = load_external_accessories_catalog(
+    FILE_ACCESSORIES_CATALOG
+)
 
 if "view_state" not in st.session_state:
-    st.session_state.view_state = "input"
+  st.session_state.view_state = "input"
 
 if not VEHICLE_CATALOG["2025"] and not VEHICLE_CATALOG["2026"]:
-    st.error(f"Could not load vehicle datasets from '{FILE_VEHICLES}'.")
+  st.error(f"Could not load vehicle datasets from '{FILE_VEHICLES}'.")
 else:
-    with st.sidebar:
-        st.header("🚗 Configuration Console")
-        selected_year = st.selectbox("Model Year:", sorted(list(VEHICLE_CATALOG.keys())))
-        available_names = sorted(list(VEHICLE_CATALOG[selected_year].keys()))
-        selected_name = st.selectbox("Vehicle Name:", available_names)
-        
-        if selected_name:
-            available_codes = sorted(list(VEHICLE_CATALOG[selected_year][selected_name].keys()))
-            selected_code = st.selectbox("Variant Code:", available_codes)
-            v_data = VEHICLE_CATALOG[selected_year][selected_name][selected_code]
-        else:
-            st.stop()
+  with st.sidebar:
+    st.header("🚗 Configuration Console")
+    selected_year = st.selectbox(
+        "Model Year:", sorted(list(VEHICLE_CATALOG.keys()))
+    )
+    available_names = sorted(list(VEHICLE_CATALOG[selected_year].keys()))
+    selected_name = st.selectbox("Vehicle Name:", available_names)
 
-        lookup_name = "Xpander Cross" if (selected_name == "Xpander" and str(selected_code).strip().upper() == "XC") else selected_name
-        
-        resolved_path = None
-        if lookup_name in VEHICLE_IMAGES:
-            img_file = VEHICLE_IMAGES[lookup_name]
-            resolved_path = find_valid_image_path(img_file)
-            if resolved_path:
-                caption_name = "Xpander Cross" if lookup_name == "Xpander Cross" else selected_name
-                st.image(resolved_path, caption=f"Mitsubishi {caption_name}", use_container_width=True)
-            else:
-                st.sidebar.error(f"⚠️ Missing: Put '{img_file}' in your 'images' folder.")
-            
-        st.markdown("---")
-        st.subheader("🏦 Financial Provider Rates")
-        
-        if BANK_RULES:
-            bank_options = sorted(list(BANK_RULES.keys()))
-            selected_bank = st.selectbox("Select Institution:", bank_options)
-            bracket_options = sorted(list(BANK_RULES[selected_bank].keys()))
-            selected_bracket = st.selectbox("Income Bracket Selection:", bracket_options)
-            fetched_roi = BANK_RULES[selected_bank][selected_bracket]
-        else:
-            selected_bank = "Sheet Benchmark"
-            fetched_roi = v_data["interest_rate"]
-            
-        bank_rate = st.number_input("Flat Interest Rate (ROI):", value=fetched_roi, format="%.4f", step=0.0001)
-        
-        st.markdown("---")
-        st.subheader("⚙️ Calculations Adjuster")
-        base_vehicle_price = st.number_input("Base Vehicle Price (AED):", value=v_data["base_price"], step=500.0)
-        down_payment_pct = st.slider("Down Payment Percentage (%):", 0, 100, 20) / 100.0
+    if selected_name:
+      available_codes = sorted(
+          list(VEHICLE_CATALOG[selected_year][selected_name].keys())
+      )
+      selected_code = st.selectbox("Variant Code:", available_codes)
+      v_data = VEHICLE_CATALOG[selected_year][selected_name][selected_code]
+    else:
+      st.stop()
 
-        st.markdown("---")
-        st.subheader("💳 Down Payment Financing Plan")
-        finance_dp_option = st.toggle("Finance the Down Payment?", value=False)
+    lookup_name = (
+        "Xpander Cross"
+        if (selected_name == "Xpander" and str(selected_code).strip().upper() == "XC")
+        else selected_name
+    )
 
-        st.markdown("---")
-        st.subheader("🛠️ Custom Accessories & Packages")
-        acc_selected_price = 0.0   
-        ceramic_selected_price = 0.0 
-        foppfgoldpackage_selected_price = 0.0 
-        warranty_selected_price = 0.0 
-        rmc_selected_cost = 0.0     
-        
-        override_rmc_active = (RMC_RULES and selected_code in RMC_RULES)
-        checked_addons_list = []
-
-        # MULTISELECT ACCESSORIES FILE INTEGRATION (63 ITEMS)
-        if EXTERNAL_ACCESSORIES:
-            selected_acc_names = st.multiselect(
-                label="Select Accessories (Multi-Select):",
-                options=list(EXTERNAL_ACCESSORIES.keys()),
-                default=[],
-                help="Search and select multiple accessories from your 63-item list."
-            )
-            for acc_item in selected_acc_names:
-                acc_info = EXTERNAL_ACCESSORIES[acc_item]
-                acc_selected_price += acc_info["price"]
-                checked_addons_list.append({
-                    "name": acc_item,
-                    "price": acc_info["price"],
-                    "vat_taxable": acc_info["vat_taxable"]
-                })
-            st.caption(f"✨ **{len(selected_acc_names)}** item(s) selected | Accessories Subtotal: **{acc_selected_price:,.2f} AED**")
-        else:
-            # Fallback to standard sheet options if dynamic catalog file is not detected
-            for name, info in v_data["accessories"].items():
-                if info["type_tag"] == "STANDARD":
-                    display_name = name
-                    if "FOPPF" in name.upper() or "GOLD PACKAGE" in name.upper(): display_name = "FO PPF GOLD PACKAGE"
-                    elif name.strip().upper() in ["ACCESSORY", "ACCESSORIES"]: display_name = "Custom Accessories"
-
-                    checked = st.checkbox(f"{display_name} (+{info['price_raw']:,.2f} AED)", value=info["default_checked"], key=f"cb_{name}")
-                    if checked:
-                        if "CUSTOM" in name.upper() and "ACCESSORIES" in name.upper(): acc_selected_price += info["price_raw"]
-                        elif "CERAMIC" in name.upper() and "WINDOW" in name.upper(): ceramic_selected_price = info["price_raw"]
-                        elif "FOPPF" in name.upper() or "GOLD PACKAGE" in name.upper(): foppfgoldpackage_selected_price = info["price_raw"]
-                        elif "WARRANTY" in name.upper(): warranty_selected_price = info["price_raw"]
-                        else: acc_selected_price += info["price_raw"]
-                        checked_addons_list.append({"name": display_name, "price": info["price_raw"], "vat_taxable": True})
-
-        # RMC LOGIC HANDLING
-        for name, info in v_data["accessories"].items():
-            if info["type_tag"] == "RMC" and not override_rmc_active:
-                checked = st.checkbox(f"{name} (+{info['price_raw']:,.2f} AED)", value=info["default_checked"], key=f"cb_{name}")
-                if checked:
-                    rmc_selected_cost = info["price_raw"]
-                    checked_addons_list.append({"name": name, "price": rmc_selected_cost / 1.05, "vat_taxable": True})
-
-        if override_rmc_active:
-            rmc_packages = ["None"] + list(RMC_RULES[selected_code].keys())
-            chosen_rmc = st.selectbox("Routine Maintenance Contract (RMC):", rmc_packages)
-            if chosen_rmc != "None":
-                rmc_selected_cost = RMC_RULES[selected_code][chosen_rmc]
-                checked_addons_list.append({"name": f"Routine Maintenance Contract ({chosen_rmc})", "price": rmc_selected_cost / 1.05, "vat_taxable": True})
-
-        u19_valuation_base = (base_vehicle_price + acc_selected_price + ceramic_selected_price + foppfgoldpackage_selected_price + warranty_selected_price + (rmc_selected_cost / 1.05)) * 1.05
-
-        is_vri_selected = False
-        is_insurance_selected = False
-        display_vri_price = u19_valuation_base * 3.15 * 1.05 / 100
-        
-        code_clean = str(selected_code).strip().upper()
-        name_clean = str(selected_name)
-        
-        if code_clean.startswith(('PR', 'HLP')) or code_clean in ["OTF03", "OTP03", "OTF06", "OTP06", "OTP06-01", "OTF08", "OTP08", "G03", "G05", "G06", "G08", "G09","G10", "G12", "P03", "P06", "P12", "G31"]:
-            display_ins_price = (u19_valuation_base * 0.03 + 510) * 1.05
-        elif code_clean.startswith(('H', 'P','MOP', 'MOG')) and any(num in code_clean for num in ["57", "59", "61", "62", "64"]):
-            display_ins_price = (u19_valuation_base * 0.0275 + 510) * 1.05
-        elif code_clean.startswith('EH') and any(num in code_clean for num in ["40", "41", "43"]):
-            display_ins_price = (u19_valuation_base * 0.03 + 450) * 1.05
-        else:
-            display_ins_price = 3690.0 if "Xpander" in name_clean or "Destinator" in name_clean else 3625.0
-
-        for name, info in v_data["accessories"].items():
-            if info["type_tag"] == "VRI":
-                is_vri_selected = st.checkbox(f"Vehicle Replacement Insurance (VRI) (+{display_vri_price:,.2f} AED)", value=info["default_checked"], key="cb_vri_insurance")
-            elif info["type_tag"] == "INSURANCE":
-                is_insurance_selected = st.checkbox(f"Vehicle Insurance (+{display_ins_price:,.2f} AED)", value=info["default_checked"], key="cb_car_insurance")
-
-        vehicle_insurance_cost = display_ins_price if is_insurance_selected else 0.0
-        vri_calculated_cost = display_vri_price if is_vri_selected else 0.0
-
-        if is_vri_selected: checked_addons_list.append({"name": "Vehicle Replacement Insurance (VRI)", "price": vri_calculated_cost, "vat_taxable": False})
-        if is_insurance_selected: checked_addons_list.append({"name": "Vehicle Insurance", "price": vehicle_insurance_cost, "vat_taxable": False})
-
-        base_vehicle_vat = base_vehicle_price * 0.05
-        total_base_vehicle_price = base_vehicle_price + base_vehicle_vat
-
-        excel_addons_total = (acc_selected_price + ceramic_selected_price + foppfgoldpackage_selected_price + warranty_selected_price + vri_calculated_cost + vehicle_insurance_cost + rmc_selected_cost)
-        total_vat_charges = (base_vehicle_price + acc_selected_price + ceramic_selected_price + foppfgoldpackage_selected_price + warranty_selected_price) * 0.05
-
-        full_vehicle_value_including_addons = base_vehicle_price + excel_addons_total + total_vat_charges
-        calculated_downpayment = full_vehicle_value_including_addons * down_payment_pct
-        finance_amount = full_vehicle_value_including_addons - calculated_downpayment
-
-        dp_processing_fee = 315.0  
-        bank_processing_fee = finance_amount * 0.0105
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Generate Summary", use_container_width=True):
-            st.session_state.view_state = "summary"
-
-    # ------------------------------------------------------------------
-    # MAIN WORKSPACE RENDERING
-    # ------------------------------------------------------------------
-    if st.session_state.view_state == "input":
-        st.title("Mitsubishi Financial Dashboard")
-        st.info("Configure variables in the sidebar panel. Then click **'Generate Summary'** to view the calculation report.")
-        
-    elif st.session_state.view_state == "summary":
-        st.title("📄 Mitsubishi Financial Matrix Calculator")
-        st.subheader(f"Unit Selected: {selected_name} — Variant {selected_code} ({selected_year})")
-        
-        lookup_name = "Xpander Cross" if (selected_name == "Xpander" and str(selected_code).strip().upper() == "XC") else selected_name
-        img_b64 = None
-        if lookup_name in VEHICLE_IMAGES:
-            img_file = VEHICLE_IMAGES[lookup_name]
-            resolved_path = find_valid_image_path(img_file)
-            if resolved_path:
-                st.image(resolved_path, width=420)
-                img_b64 = get_image_base64(resolved_path)
-                
-        st.markdown("---")
-
-        # SECTION 1: BASE VEHICLE PRICE & VAT BREAKDOWN
-        st.header("1. Base Vehicle Price & Tax Breakdown")
-        base_price_df = pd.DataFrame([{
-            "Vehicle Model / Variant": f"{selected_name} ({selected_code})",
-            "Base Unit Price (Excl. VAT)": f"{base_vehicle_price:,.2f} AED",
-            "VAT (5%)": f"{base_vehicle_vat:,.2f} AED",
-            "Total Unit Price (Incl. VAT)": f"{total_base_vehicle_price:,.2f} AED"
-        }])
-        st.table(base_price_df)
-
-        # FINANCIAL OVERVIEW METRICS
-        st.subheader("Financial Overview")
-        col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric("Total Vehicle Value (incl. Addons)", f"{full_vehicle_value_including_addons:,.2f} AED") 
-        col_s2.metric("Gross Down Payment Req.", f"{calculated_downpayment:,.2f} AED")
-        col_s3.metric("Vehicle Finance Amount", f"{finance_amount:,.2f} AED")
-        st.markdown("---")
-
-        # SECTION 2: EMI BREAKDOWN MATRIX
-        st.header("2. Loan Installment Breakdowns")
-        
-        st.subheader("🟢 Primary Asset Vehicle Financing")
-        tenures = [1, 2, 3, 4, 5]
-        vehicle_emi_results = []
-        
-        for years in tenures:
-            months = years * 12
-            total_interest = finance_amount * bank_rate * years
-            monthly_emi = (finance_amount + total_interest) / months
-            
-            vehicle_emi_results.append({
-                "Asset Term (Years)": f"{years} Years ({months} Mos)",
-                "Flat ROI %": f"{bank_rate*100:.4f}%",
-                "Principal Loan Block": f"{finance_amount:,.2f} AED",
-                "Total Interest Accrued": f"{total_interest:,.2f} AED",
-                "Monthly Vehicle EMI": f"{monthly_emi:,.2f} AED"
-            })
-        st.table(pd.DataFrame(vehicle_emi_results))
-        
-        dp_results = []
-        if finance_dp_option:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.subheader("🔵 Down Payment Loan Financing Options")
-            vehicle_reservation_fee = v_data["reservation_fee"]
-            dp_financed_base = max(0.0, calculated_downpayment - vehicle_reservation_fee)
-            
-            dp_options = [
-                {"months": 3, "rate": 0.0000, "label": "3 Months (0.00% ROI)"},
-                {"months": 12, "rate": 0.0525, "label": "12 Months (5.25% ROI)"},
-                {"months": 24, "rate": 0.0630, "label": "24 Months (6.30% ROI)"}
-            ]
-            
-            for opt in dp_options:
-                total_interest = dp_financed_base * opt["rate"] * (opt["months"] / 12.0)
-                monthly_emi = (dp_financed_base + total_interest) / opt["months"]
-                
-                dp_results.append({
-                    "Term": opt["label"],
-                    "Financed Balance": f"{dp_financed_base:,.2f} AED",
-                    "Total Interest": f"{total_interest:,.2f} AED",
-                    "Monthly EMI": f"{monthly_emi:,.2f} AED"
-                })
-            
-            st.table(pd.DataFrame(dp_results))
-            
-        st.markdown("---")
-
-        # SECTION 3: ACCESSORIES BREAKDOWN
-        st.header("3. Accessories Breakdown")
-        addons_table_data = []
-        if checked_addons_list:
-            total_display_addons_price = 0.0
-            for addon in checked_addons_list:
-                item_price = addon["price"]
-                item_vat = (item_price * 0.05) if addon["vat_taxable"] else 0.0
-                total_display_addons_price += (item_price + item_vat)
-                addons_table_data.append({
-                    "Selected Accessories / Services": addon["name"],
-                    "Individual Price (Base)": f"{item_price:,.2f} AED",
-                    "VAT Amount (5%)": f"{item_vat:,.2f} AED" if addon["vat_taxable"] else "0.00 AED (VAT Pre-incl.)",
-                    "Total Cost (incl. VAT)": f"{(item_price + item_vat):,.2f} AED"
-                })
-            st.table(pd.DataFrame(addons_table_data))
-        else:
-            st.write("*No optional accessories selected.*")
-        st.markdown("---")
-
-        # SECTION 4: TOTAL CASH OUTLAY REQUIRED
-        st.header("4. Out-of-Pocket Cash Outlay Summary")
-        registration_fee = v_data["registration_fee"]
-        
-        if finance_dp_option:
-            vehicle_reservation_fee = v_data["reservation_fee"]
-            grand_total_cash_outlay = vehicle_reservation_fee + registration_fee + dp_processing_fee + bank_processing_fee
-        else:
-            grand_total_cash_outlay = calculated_downpayment + registration_fee + dp_processing_fee + bank_processing_fee
-        
-        col_out1, col_out2 = st.columns(2)
-        with col_out1:
-            if finance_dp_option:
-                st.write(f"**Showroom Reservation Fee:** {v_data['reservation_fee']:,.2f} AED (Paid Upfront)")
-                st.write(f"**Remaining Down Payment Balance:** {max(0.0, calculated_downpayment - v_data['reservation_fee']):,.2f} AED (Financed via Loan Plan)")
-            else:
-                st.write(f"**Full Down Payment Amount:** {calculated_downpayment:,.2f} AED (Upfront Out-of-Pocket)")
-            st.write(f"**Registration Documentation Fee:** {registration_fee:,.2f} AED")
-        with col_out2:
-            st.write(f"**DP Processing Fee (DP PF):** {dp_processing_fee:,.2f} AED")
-            st.write(f"**Bank Processing Fee (Bank PF):** {bank_processing_fee:,.2f} AED")
-            
-        st.markdown(
-            f"""
-            <div style="background-color: #F4F0EA; padding: 1.25rem 1.5rem; border-radius: 8px; border-left: 4px solid #191919; margin-top: 1.5rem;">
-                <span style="font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 0.9rem; color: #555555; display: block; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
-                    🔑 Actual Upfront Cash Required at Showroom Handover
-                </span>
-                <span style="font-family: 'Amethysta', serif; font-size: 1.8rem; color: #191919;">
-                    {grand_total_cash_outlay:,.2f} <span style="font-size: 1.2rem;">AED</span>
-                </span>
-            </div>
-            """, 
-            unsafe_allow_html=True
+    resolved_path = None
+    if lookup_name in VEHICLE_IMAGES:
+      img_file = VEHICLE_IMAGES[lookup_name]
+      resolved_path = find_valid_image_path(img_file)
+      if resolved_path:
+        caption_name = (
+            "Xpander Cross" if lookup_name == "Xpander Cross" else selected_name
         )
-        st.markdown("---")
+        st.image(
+            resolved_path,
+            caption=f"Mitsubishi {caption_name}",
+            use_container_width=True,
+        )
+      else:
+        st.sidebar.error(f"⚠️ Missing: Put '{img_file}' in your 'images' folder.")
 
-        # SECTION 5: DOCUMENTATION REQUIREMENTS & DISCLOSURES
-        st.header("5. Application Requirements & Disclosures")
-        st.markdown(r"""
+    st.markdown("---")
+    st.subheader("🏦 Financial Provider Rates")
+
+    if BANK_RULES:
+      bank_options = sorted(list(BANK_RULES.keys()))
+      selected_bank = st.selectbox("Select Institution:", bank_options)
+      bracket_options = sorted(list(BANK_RULES[selected_bank].keys()))
+      selected_bracket = st.selectbox("Income Bracket Selection:", bracket_options)
+      fetched_roi = BANK_RULES[selected_bank][selected_bracket]
+    else:
+      selected_bank = "Sheet Benchmark"
+      fetched_roi = v_data["interest_rate"]
+
+    bank_rate = st.number_input(
+        "Flat Interest Rate (ROI):",
+        value=fetched_roi,
+        format="%.4f",
+        step=0.0001,
+    )
+
+    st.markdown("---")
+    st.subheader("⚙️ Calculations Adjuster")
+    base_vehicle_price = st.number_input(
+        "Base Vehicle Price (AED):", value=v_data["base_price"], step=500.0
+    )
+    down_payment_pct = st.slider("Down Payment Percentage (%):", 0, 100, 20) / 100.0
+
+    st.markdown("---")
+    st.subheader("💳 Down Payment Financing Plan")
+    finance_dp_option = st.toggle("Finance the Down Payment?", value=False)
+
+    st.markdown("---")
+    st.subheader("🛠️ Custom Accessories & Packages")
+    acc_selected_price = 0.0
+    ceramic_selected_price = 0.0
+    foppfgoldpackage_selected_price = 0.0
+    warranty_selected_price = 0.0
+    rmc_selected_cost = 0.0
+
+    override_rmc_active = RMC_RULES and selected_code in RMC_RULES
+    checked_addons_list = []
+
+    # MULTISELECT ACCESSORIES FILE INTEGRATION (63 ITEMS + EXTENDED WARRANTY)
+    if EXTERNAL_ACCESSORIES:
+      selected_acc_names = st.multiselect(
+          label="Select Accessories & Packages (Multi-Select):",
+          options=list(EXTERNAL_ACCESSORIES.keys()),
+          default=[],
+          help=(
+              "Search and select multiple accessories and packages from your"
+              " catalog."
+          ),
+      )
+      for acc_item in selected_acc_names:
+        acc_info = EXTERNAL_ACCESSORIES[acc_item]
+        item_price = acc_info["price"]
+        item_name_upper = acc_item.upper()
+
+        if "WARRANTY" in item_name_upper:
+          warranty_selected_price += item_price
+        elif "CERAMIC" in item_name_upper and "WINDOW" in item_name_upper:
+          ceramic_selected_price += item_price
+        elif "FOPPF" in item_name_upper or "GOLD PACKAGE" in item_name_upper:
+          foppfgoldpackage_selected_price += item_price
+        else:
+          acc_selected_price += item_price
+
+        checked_addons_list.append({
+            "name": acc_item,
+            "price": item_price,
+            "vat_taxable": acc_info["vat_taxable"],
+        })
+      st.caption(
+          f"✨ **{len(selected_acc_names)}** item(s) selected | Accessories"
+          f" Subtotal: **{acc_selected_price:,.2f} AED** | Warranty:"
+          f" **{warranty_selected_price:,.2f} AED**"
+      )
+    else:
+      # Fallback to standard sheet options if dynamic catalog file is not detected
+      for name, info in v_data["accessories"].items():
+        if info["type_tag"] == "STANDARD":
+          display_name = name
+          if "FOPPF" in name.upper() or "GOLD PACKAGE" in name.upper():
+            display_name = "FO PPF GOLD PACKAGE"
+          elif name.strip().upper() in ["ACCESSORY", "ACCESSORIES"]:
+            display_name = "Custom Accessories"
+
+          checked = st.checkbox(
+              f"{display_name} (+{info['price_raw']:,.2f} AED)",
+              value=info["default_checked"],
+              key=f"cb_{name}",
+          )
+          if checked:
+            if "WARRANTY" in name.upper():
+              warranty_selected_price = info["price_raw"]
+            elif "CUSTOM" in name.upper() and "ACCESSORIES" in name.upper():
+              acc_selected_price += info["price_raw"]
+            elif "CERAMIC" in name.upper() and "WINDOW" in name.upper():
+              ceramic_selected_price = info["price_raw"]
+            elif "FOPPF" in name.upper() or "GOLD PACKAGE" in name.upper():
+              foppfgoldpackage_selected_price = info["price_raw"]
+            else:
+              acc_selected_price += info["price_raw"]
+            checked_addons_list.append({
+                "name": display_name,
+                "price": info["price_raw"],
+                "vat_taxable": True,
+            })
+
+    # RMC LOGIC HANDLING
+    for name, info in v_data["accessories"].items():
+      if info["type_tag"] == "RMC" and not override_rmc_active:
+        checked = st.checkbox(
+            f"{name} (+{info['price_raw']:,.2f} AED)",
+            value=info["default_checked"],
+            key=f"cb_{name}",
+        )
+        if checked:
+          rmc_selected_cost = info["price_raw"]
+          checked_addons_list.append({
+              "name": name,
+              "price": rmc_selected_cost / 1.05,
+              "vat_taxable": True,
+          })
+
+    if override_rmc_active:
+      rmc_packages = ["None"] + list(RMC_RULES[selected_code].keys())
+      chosen_rmc = st.selectbox(
+          "Routine Maintenance Contract (RMC):", rmc_packages
+      )
+      if chosen_rmc != "None":
+        rmc_selected_cost = RMC_RULES[selected_code][chosen_rmc]
+        checked_addons_list.append({
+            "name": f"Routine Maintenance Contract ({chosen_rmc})",
+            "price": rmc_selected_cost / 1.05,
+            "vat_taxable": True,
+        })
+
+    u19_valuation_base = (
+        base_vehicle_price
+        + acc_selected_price
+        + ceramic_selected_price
+        + foppfgoldpackage_selected_price
+        + warranty_selected_price
+        + (rmc_selected_cost / 1.05)
+    ) * 1.05
+
+    is_vri_selected = False
+    is_insurance_selected = False
+    display_vri_price = u19_valuation_base * 3.15 * 1.05 / 100
+
+    code_clean = str(selected_code).strip().upper()
+    name_clean = str(selected_name)
+
+    if code_clean.startswith(("PR", "HLP")) or code_clean in [
+        "OTF03",
+        "OTP03",
+        "OTF06",
+        "OTP06",
+        "OTP06-01",
+        "OTF08",
+        "OTP08",
+        "G03",
+        "G05",
+        "G06",
+        "G08",
+        "G09",
+        "G10",
+        "G12",
+        "P03",
+        "P06",
+        "P12",
+        "G31",
+    ]:
+      display_ins_price = (u19_valuation_base * 0.03 + 510) * 1.05
+    elif code_clean.startswith(("H", "P", "MOP", "MOG")) and any(
+        num in code_clean for num in ["57", "59", "61", "62", "64"]
+    ):
+      display_ins_price = (u19_valuation_base * 0.0275 + 510) * 1.05
+    elif code_clean.startswith("EH") and any(
+        num in code_clean for num in ["40", "41", "43"]
+    ):
+      display_ins_price = (u19_valuation_base * 0.03 + 450) * 1.05
+    else:
+      display_ins_price = (
+          3690.0
+          if "Xpander" in name_clean or "Destinator" in name_clean
+          else 3625.0
+      )
+
+    for name, info in v_data["accessories"].items():
+      if info["type_tag"] == "VRI":
+        is_vri_selected = st.checkbox(
+            f"Vehicle Replacement Insurance (VRI) (+{display_vri_price:,.2f}"
+            " AED)",
+            value=info["default_checked"],
+            key="cb_vri_insurance",
+        )
+      elif info["type_tag"] == "INSURANCE":
+        is_insurance_selected = st.checkbox(
+            f"Vehicle Insurance (+{display_ins_price:,.2f} AED)",
+            value=info["default_checked"],
+            key="cb_car_insurance",
+        )
+
+    vehicle_insurance_cost = display_ins_price if is_insurance_selected else 0.0
+    vri_calculated_cost = display_vri_price if is_vri_selected else 0.0
+
+    if is_vri_selected:
+      checked_addons_list.append({
+          "name": "Vehicle Replacement Insurance (VRI)",
+          "price": vri_calculated_cost,
+          "vat_taxable": False,
+      })
+    if is_insurance_selected:
+      checked_addons_list.append({
+          "name": "Vehicle Insurance",
+          "price": vehicle_insurance_cost,
+          "vat_taxable": False,
+      })
+
+    base_vehicle_vat = base_vehicle_price * 0.05
+    total_base_vehicle_price = base_vehicle_price + base_vehicle_vat
+
+    excel_addons_total = (
+        acc_selected_price
+        + ceramic_selected_price
+        + foppfgoldpackage_selected_price
+        + warranty_selected_price
+        + vri_calculated_cost
+        + vehicle_insurance_cost
+        + rmc_selected_cost
+    )
+    total_vat_charges = (
+        base_vehicle_price
+        + acc_selected_price
+        + ceramic_selected_price
+        + foppfgoldpackage_selected_price
+        + warranty_selected_price
+    ) * 0.05
+
+    full_vehicle_value_including_addons = (
+        base_vehicle_price + excel_addons_total + total_vat_charges
+    )
+    calculated_downpayment = (
+        full_vehicle_value_including_addons * down_payment_pct
+    )
+    finance_amount = full_vehicle_value_including_addons - calculated_downpayment
+
+    dp_processing_fee = 315.0
+    bank_processing_fee = finance_amount * 0.0105
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("Generate Summary", use_container_width=True):
+      st.session_state.view_state = "summary"
+
+  # ------------------------------------------------------------------
+  # MAIN WORKSPACE RENDERING
+  # ------------------------------------------------------------------
+  if st.session_state.view_state == "input":
+    st.title("Mitsubishi Financial Dashboard")
+    st.info(
+        "Configure variables in the sidebar panel. Then click **'Generate"
+        " Summary'** to view the calculation report."
+    )
+
+  elif st.session_state.view_state == "summary":
+    st.title("📄 Mitsubishi Financial Matrix Calculator")
+    st.subheader(
+        f"Unit Selected: {selected_name} — Variant {selected_code}"
+        f" ({selected_year})"
+    )
+
+    lookup_name = (
+        "Xpander Cross"
+        if (selected_name == "Xpander" and str(selected_code).strip().upper() == "XC")
+        else selected_name
+    )
+    img_b64 = None
+    if lookup_name in VEHICLE_IMAGES:
+      img_file = VEHICLE_IMAGES[lookup_name]
+      resolved_path = find_valid_image_path(img_file)
+      if resolved_path:
+        st.image(resolved_path, width=420)
+        img_b64 = get_image_base64(resolved_path)
+
+    st.markdown("---")
+
+    # SECTION 1: BASE VEHICLE PRICE & VAT BREAKDOWN
+    st.header("1. Base Vehicle Price & Tax Breakdown")
+    base_price_df = pd.DataFrame([{
+        "Vehicle Model / Variant": f"{selected_name} ({selected_code})",
+        "Base Unit Price (Excl. VAT)": f"{base_vehicle_price:,.2f} AED",
+        "VAT (5%)": f"{base_vehicle_vat:,.2f} AED",
+        "Total Unit Price (Incl. VAT)": f"{total_base_vehicle_price:,.2f} AED",
+    }])
+    st.table(base_price_df)
+
+    # FINANCIAL OVERVIEW METRICS
+    st.subheader("Financial Overview")
+    col_s1, col_s2, col_s3 = st.columns(3)
+    col_s1.metric(
+        "Total Vehicle Value (incl. Addons)",
+        f"{full_vehicle_value_including_addons:,.2f} AED",
+    )
+    col_s2.metric(
+        "Gross Down Payment Req.", f"{calculated_downpayment:,.2f} AED"
+    )
+    col_s3.metric("Vehicle Finance Amount", f"{finance_amount:,.2f} AED")
+    st.markdown("---")
+
+    # SECTION 2: EMI BREAKDOWN MATRIX
+    st.header("2. Loan Installment Breakdowns")
+
+    st.subheader("🟢 Primary Asset Vehicle Financing")
+    tenures = [1, 2, 3, 4, 5]
+    vehicle_emi_results = []
+
+    for years in tenures:
+      months = years * 12
+      total_interest = finance_amount * bank_rate * years
+      monthly_emi = (finance_amount + total_interest) / months
+
+      vehicle_emi_results.append({
+          "Asset Term (Years)": f"{years} Years ({months} Mos)",
+          "Flat ROI %": f"{bank_rate*100:.4f}%",
+          "Principal Loan Block": f"{finance_amount:,.2f} AED",
+          "Total Interest Accrued": f"{total_interest:,.2f} AED",
+          "Monthly Vehicle EMI": f"{monthly_emi:,.2f} AED",
+      })
+    st.table(pd.DataFrame(vehicle_emi_results))
+
+    dp_results = []
+    if finance_dp_option:
+      st.markdown("<br>", unsafe_allow_html=True)
+      st.subheader("🔵 Down Payment Loan Financing Options")
+      vehicle_reservation_fee = v_data["reservation_fee"]
+      dp_financed_base = max(
+          0.0, calculated_downpayment - vehicle_reservation_fee
+      )
+
+      dp_options = [
+          {"months": 3, "rate": 0.0000, "label": "3 Months (0.00% ROI)"},
+          {"months": 12, "rate": 0.0525, "label": "12 Months (5.25% ROI)"},
+          {"months": 24, "rate": 0.0630, "label": "24 Months (6.30% ROI)"},
+      ]
+
+      for opt in dp_options:
+        total_interest = (
+            dp_financed_base * opt["rate"] * (opt["months"] / 12.0)
+        )
+        monthly_emi = (dp_financed_base + total_interest) / opt["months"]
+
+        dp_results.append({
+            "Term": opt["label"],
+            "Financed Balance": f"{dp_financed_base:,.2f} AED",
+            "Total Interest": f"{total_interest:,.2f} AED",
+            "Monthly EMI": f"{monthly_emi:,.2f} AED",
+        })
+
+      st.table(pd.DataFrame(dp_results))
+
+    st.markdown("---")
+
+    # SECTION 3: ACCESSORIES BREAKDOWN
+    st.header("3. Accessories Breakdown")
+    addons_table_data = []
+    if checked_addons_list:
+      total_display_addons_price = 0.0
+      for addon in checked_addons_list:
+        item_price = addon["price"]
+        item_vat = (item_price * 0.05) if addon["vat_taxable"] else 0.0
+        total_display_addons_price += item_price + item_vat
+        addons_table_data.append({
+            "Selected Accessories / Services": addon["name"],
+            "Individual Price (Base)": f"{item_price:,.2f} AED",
+            "VAT Amount (5%)": (
+                f"{item_vat:,.2f} AED"
+                if addon["vat_taxable"]
+                else "0.00 AED (VAT Pre-incl.)"
+            ),
+            "Total Cost (incl. VAT)": f"{(item_price + item_vat):,.2f} AED",
+        })
+      st.table(pd.DataFrame(addons_table_data))
+    else:
+      st.write("*No optional accessories selected.*")
+    st.markdown("---")
+
+    # SECTION 4: TOTAL CASH OUTLAY REQUIRED
+    st.header("4. Out-of-Pocket Cash Outlay Summary")
+    registration_fee = v_data["registration_fee"]
+
+    if finance_dp_option:
+      vehicle_reservation_fee = v_data["reservation_fee"]
+      grand_total_cash_outlay = (
+          vehicle_reservation_fee
+          + registration_fee
+          + dp_processing_fee
+          + bank_processing_fee
+      )
+    else:
+      grand_total_cash_outlay = (
+          calculated_downpayment
+          + registration_fee
+          + dp_processing_fee
+          + bank_processing_fee
+      )
+
+    col_out1, col_out2 = st.columns(2)
+    with col_out1:
+      if finance_dp_option:
+        st.write(
+            "**Showroom Reservation Fee:**"
+            f" {v_data['reservation_fee']:,.2f} AED (Paid Upfront)"
+        )
+        st.write(
+            "**Remaining Down Payment Balance:**"
+            f" {max(0.0, calculated_downpayment - v_data['reservation_fee']):,.2f}"
+            " AED (Financed via Loan Plan)"
+        )
+      else:
+        st.write(
+            "**Full Down Payment Amount:**"
+            f" {calculated_downpayment:,.2f} AED (Upfront Out-of-Pocket)"
+        )
+      st.write(
+          f"**Registration Documentation Fee:** {registration_fee:,.2f} AED"
+      )
+    with col_out2:
+      st.write(f"**DP Processing Fee (DP PF):** {dp_processing_fee:,.2f} AED")
+      st.write(
+          f"**Bank Processing Fee (Bank PF):** {bank_processing_fee:,.2f} AED"
+      )
+
+    st.markdown(
+        f"""
+        <div style="background-color: #F4F0EA; padding: 1.25rem 1.5rem; border-radius: 8px; border-left: 4px solid #191919; margin-top: 1.5rem;">
+            <span style="font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 0.9rem; color: #555555; display: block; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
+                🔑 Actual Upfront Cash Required at Showroom Handover
+            </span>
+            <span style="font-family: 'Amethysta', serif; font-size: 1.8rem; color: #191919;">
+                {grand_total_cash_outlay:,.2f} <span style="font-size: 1.2rem;">AED</span>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown("---")
+
+    # SECTION 5: DOCUMENTATION REQUIREMENTS & DISCLOSURES
+    st.header("5. Application Requirements & Disclosures")
+    st.markdown(
+        """
         <div style="background-color: #F4F0EA; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #191919; margin-top: 1.5rem;">
             <strong style="font-family: sans-serif; font-size: 1.1rem; color: #191919; display: block; margin-bottom: 0.75rem;">📋 Required Documentation Checklist:</strong>
             <ul style="margin-bottom: 1rem; padding-left: 1.25rem;">
@@ -657,377 +943,13 @@ else:
                 <li>Labour Card / Free Zone / Employer ID.</li>
                 <li>Copy of the UAE Driver's License Both Sides.</li>
                 <li>Current Dated Salary Certificate from The Employer.</li>
-                <li>Pay Slips For The Last 3 Months - [If Variance In Salary].</li>
-                <li>IBAN.</li>
+                <li>Pay Slips For The Last 3 Months (Or 6 Months For Commission-Based Income).</li>
+                <li>Latest 3 to 6 Months Personal Bank Statement showing Salary Credits.</li>
             </ul>
+            <div class="disclaimer-text">
+                <strong>Disclaimer:</strong> All calculations, rates, and figures provided by this matrix calculator are for estimation purposes only and subject to formal bank approval, final credit evaluation, and prevailing regulatory changes in the UAE.
+            </div>
         </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ==========================================
-        # GENERATE FULL-MATCH HTML/PRINT PDF REPORT
-        # ==========================================
-        img_html = f'<img src="{img_b64}" class="vehicle-img" alt="{selected_name}"/>' if img_b64 else '<div style="padding:20px; background:#eee; text-align:center; border-radius:6px;">[Image Not Available]</div>'
-        
-        vehicle_emi_rows = "".join([
-            f"<tr><td>{r['Asset Term (Years)']}</td><td>{r['Flat ROI %']}</td><td>{r['Principal Loan Block']}</td><td>{r['Total Interest Accrued']}</td><td><strong>{r['Monthly Vehicle EMI']}</strong></td></tr>"
-            for r in vehicle_emi_results
-        ])
-
-        dp_emi_rows = ""
-        if dp_results:
-            dp_emi_rows = f"""
-            <h3>🔵 Down Payment Loan Financing Options</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Term</th>
-                        <th>Financed Balance</th>
-                        <th>Total Interest</th>
-                        <th>Monthly EMI</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {"".join([f"<tr><td>{r['Term']}</td><td>{r['Financed Balance']}</td><td>{r['Total Interest']}</td><td><strong>{r['Monthly EMI']}</strong></td></tr>" for r in dp_results])}
-                </tbody>
-            </table>
-            """
-
-        addons_rows = ""
-        if addons_table_data:
-            addons_rows = "".join([
-                f"<tr><td>{r['Selected Accessories / Services']}</td><td>{r['Individual Price (Base)']}</td><td>{r['VAT Amount (5%)']}</td><td><strong>{r['Total Cost (incl. VAT)']}</strong></td></tr>"
-                for r in addons_table_data
-            ])
-        else:
-            addons_rows = '<tr><td colspan="4">No optional accessories selected.</td></tr>'
-
-        if finance_dp_option:
-            cash_outlay_detail = f"""
-            <p><strong>Showroom Reservation Fee:</strong> {v_data['reservation_fee']:,.2f} AED (Paid Upfront)</p>
-            <p><strong>Remaining Down Payment Balance:</strong> {max(0.0, calculated_downpayment - v_data['reservation_fee']):,.2f} AED (Financed via Loan Plan)</p>
-            """
-        else:
-            cash_outlay_detail = f"<p><strong>Full Down Payment Amount:</strong> {calculated_downpayment:,.2f} AED (Upfront Out-of-Pocket)</p>"
-
-        html_report = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Mitsubishi Financial Matrix Report - {selected_name} ({selected_code})</title>
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght=600;700&family=Amethysta&display=swap');
-    
-    body {{
-        font-family: 'Amethysta', serif;
-        color: #191919;
-        background-color: #FFFFFF;
-        padding: 30px;
-        line-height: 1.5;
-        max-width: 900px;
-        margin: 0 auto;
-    }}
-    .header {{
-        border-bottom: 3px solid #191919;
-        padding-bottom: 12px;
-        margin-bottom: 25px;
-    }}
-    h1 {{
-        font-family: 'Quicksand', sans-serif;
-        font-size: 26px;
-        margin: 0 0 6px 0;
-        color: #191919;
-    }}
-    .sub-title {{
-        font-family: 'Quicksand', sans-serif;
-        font-size: 15px;
-        color: #555555;
-        margin: 0;
-    }}
-    h2 {{
-        font-family: 'Amethysta', serif;
-        font-size: 18px;
-        color: #383838;
-        margin: 25px 0 12px 0;
-        border-bottom: 1px solid #DDD;
-        padding-bottom: 6px;
-    }}
-    h3 {{
-        font-family: 'Quicksand', sans-serif;
-        font-size: 14px;
-        color: #444444;
-        margin: 15px 0 10px 0;
-    }}
-    .top-container {{
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 25px;
-        gap: 20px;
-    }}
-    .meta-info p {{
-        margin: 4px 0;
-        font-size: 14px;
-    }}
-    .vehicle-img {{
-        max-width: 340px;
-        max-height: 200px;
-        object-fit: contain;
-        border-radius: 6px;
-    }}
-    .summary-cards {{
-        display: flex;
-        gap: 15px;
-        margin-bottom: 25px;
-    }}
-    .card {{
-        flex: 1;
-        background: #F4F0EA;
-        padding: 14px 16px;
-        border-radius: 6px;
-        border-left: 4px solid #191919;
-    }}
-    .card-label {{
-        font-family: 'Quicksand', sans-serif;
-        font-size: 11px;
-        text-transform: uppercase;
-        color: #555;
-        font-weight: 700;
-    }}
-    .card-value {{
-        font-family: 'Amethysta', serif;
-        font-size: 19px;
-        font-weight: bold;
-        margin-top: 6px;
-        color: #191919;
-    }}
-    table {{
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 20px;
-        font-size: 13px;
-    }}
-    th, td {{
-        border: 1px solid #DDDDDD;
-        padding: 9px 12px;
-        text-align: left;
-    }}
-    th {{
-        background-color: #F4F0EA;
-        font-family: 'Quicksand', sans-serif;
-        font-weight: 700;
-        color: #383838;
-    }}
-    .outlay-grid {{
-        display: flex;
-        gap: 20px;
-        margin-bottom: 15px;
-        font-size: 13px;
-    }}
-    .outlay-col {{
-        flex: 1;
-    }}
-    .outlay-col p {{
-        margin: 5px 0;
-    }}
-    .cash-box {{
-        background-color: #F4F0EA;
-        padding: 16px;
-        border-radius: 6px;
-        border-left: 4px solid #191919;
-        margin-top: 15px;
-        margin-bottom: 25px;
-    }}
-    .cash-title {{
-        font-family: 'Quicksand', sans-serif;
-        font-weight: 700;
-        font-size: 12px;
-        text-transform: uppercase;
-        color: #555;
-    }}
-    .cash-val {{
-        font-family: 'Amethysta', serif;
-        font-size: 24px;
-        font-weight: bold;
-        margin-top: 4px;
-        color: #191919;
-    }}
-    .checklist {{
-        background-color: #F4F0EA;
-        padding: 16px 20px;
-        border-radius: 6px;
-        border-left: 4px solid #191919;
-        font-size: 12px;
-    }}
-    .checklist ul {{
-        margin: 8px 0 0 0;
-        padding-left: 20px;
-        line-height: 1.6;
-    }}
-    .print-btn {{
-        background-color: #191919;
-        color: white;
-        padding: 10px 22px;
-        border: none;
-        border-radius: 6px;
-        font-family: 'Quicksand', sans-serif;
-        font-weight: bold;
-        cursor: pointer;
-        margin-bottom: 20px;
-        font-size: 14px;
-    }}
-    @media print {{
-        .no-print {{ display: none !important; }}
-        body {{ padding: 0; max-width: 100%; }}
-        .card, .cash-box, .checklist {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-    }}
-</style>
-</head>
-<body>
-
-<button class="print-btn no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
-
-<div class="header">
-    <h1>📄 Mitsubishi Financial Matrix Report</h1>
-    <div class="sub-title">Unit Selected: <strong>{selected_name} — Variant {selected_code} ({selected_year})</strong></div>
-</div>
-
-<div class="top-container">
-    <div class="meta-info">
-        <p><strong>Financial Institution:</strong> {selected_bank}</p>
-        <p><strong>Flat Interest Rate (ROI):</strong> {bank_rate*100:.4f}%</p>
-        <p><strong>Down Payment Ratio:</strong> {down_payment_pct*100:.0f}%</p>
-    </div>
-    <div>
-        {img_html}
-    </div>
-</div>
-
-<h2>1. Base Vehicle Price & Tax Breakdown</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Vehicle Model / Variant</th>
-            <th>Base Unit Price (Excl. VAT)</th>
-            <th>VAT (5%)</th>
-            <th>Total Unit Price (Incl. VAT)</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td>{selected_name} ({selected_code})</td>
-            <td>{base_vehicle_price:,.2f} AED</td>
-            <td>{base_vehicle_vat:,.2f} AED</td>
-            <td><strong>{total_base_vehicle_price:,.2f} AED</strong></td>
-        </tr>
-    </tbody>
-</table>
-
-<div class="summary-cards">
-    <div class="card">
-        <div class="card-label">Total Vehicle Value (incl. Addons)</div>
-        <div class="card-value">{full_vehicle_value_including_addons:,.2f} AED</div>
-    </div>
-    <div class="card">
-        <div class="card-label">Gross Down Payment Req.</div>
-        <div class="card-value">{calculated_downpayment:,.2f} AED</div>
-    </div>
-    <div class="card">
-        <div class="card-label">Vehicle Finance Amount</div>
-        <div class="card-value">{finance_amount:,.2f} AED</div>
-    </div>
-</div>
-
-<h2>2. Loan Installment Breakdowns</h2>
-<h3>🟢 Primary Asset Vehicle Financing</h3>
-<table>
-    <thead>
-        <tr>
-            <th>Asset Term (Years)</th>
-            <th>Flat ROI %</th>
-            <th>Principal Loan Block</th>
-            <th>Total Interest Accrued</th>
-            <th>Monthly Vehicle EMI</th>
-        </tr>
-    </thead>
-    <tbody>
-        {vehicle_emi_rows}
-    </tbody>
-</table>
-
-{dp_emi_rows}
-
-<h2>3. Accessories Breakdown</h2>
-<table>
-    <thead>
-        <tr>
-            <th>Selected Accessories / Services</th>
-            <th>Individual Price (Base)</th>
-            <th>VAT Amount (5%)</th>
-            <th>Total Cost (incl. VAT)</th>
-        </tr>
-    </thead>
-    <tbody>
-        {addons_rows}
-    </tbody>
-</table>
-
-<h2>4. Out-of-Pocket Cash Outlay Summary</h2>
-<div class="outlay-grid">
-    <div class="outlay-col">
-        {cash_outlay_detail}
-        <p><strong>Registration Documentation Fee:</strong> {registration_fee:,.2f} AED</p>
-    </div>
-    <div class="outlay-col">
-        <p><strong>DP Processing Fee (DP PF):</strong> {dp_processing_fee:,.2f} AED</p>
-        <p><strong>Bank Processing Fee (Bank PF):</strong> {bank_processing_fee:,.2f} AED</p>
-    </div>
-</div>
-
-<div class="cash-box">
-    <div class="cash-title">🔑 Actual Upfront Cash Required at Showroom Handover</div>
-    <div class="cash-val">{grand_total_cash_outlay:,.2f} AED</div>
-</div>
-
-<h2>5. Application Requirements & Disclosures</h2>
-<div class="checklist">
-    <strong>📋 Required Documentation Checklist:</strong>
-    <ul>
-        <li>Passport Copy, Digital Visa & Address Page For Indian Passport, Page #44 For Philippines Passport.</li>
-        <li>Emirates ID Card Copy Both Sides.</li>
-        <li>Labour Card / Free Zone / Employer ID.</li>
-        <li>Copy of the UAE Driver's License Both Sides.</li>
-        <li>Current Dated Salary Certificate from The Employer.</li>
-        <li>Pay Slips For The Last 3 Months - [If Variance In Salary].</li>
-        <li>IBAN.</li>
-    </ul>
-</div>
-
-</body>
-</html>"""
-
-        col_space_left, col_btn1, col_btn2, col_btn3, col_space_right = st.columns([1, 2, 2, 2, 1])
-        with col_btn1:
-            if st.button("⬅️ Back to Input", use_container_width=True):
-                st.session_state.view_state = "input"
-                st.rerun()
-        with col_btn2:
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                pd.DataFrame(vehicle_emi_results).to_excel(writer, index=False, sheet_name="Vehicle Loan Matrix")
-            st.download_button(
-                label="💾 Save Excel",
-                data=buffer.getvalue(),
-                file_name=f"{selected_name.replace(' ', '_')}_Summary.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        with col_btn3:
-            st.download_button(
-                label="🖨️ Download HTML PDF/Print",
-                data=html_report,
-                file_name=f"{selected_name.replace(' ', '_')}_Financial_Report.html",
-                mime="text/html",
-                use_container_width=True
-            )
+        """,
+        unsafe_allow_html=True,
+    )
