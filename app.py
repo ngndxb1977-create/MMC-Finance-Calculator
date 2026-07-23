@@ -139,54 +139,56 @@ def get_image_base64(image_path):
 # ------------------------------------------------------------------
 @st.cache_data
 def load_external_accessories_catalog(file_path):
-  """Loads full accessories catalog (63+ items) from an external Excel file.
-
-  Expected Columns: 'Accessory Name', 'Price', 'VAT Applicable' (Optional,
-  defaults to YES)
-  """
+  """Loads full accessories catalog from an external Excel file with robust string cleaning."""
   accessories_dict = {}
   if os.path.exists(file_path):
     try:
       df = pd.read_excel(file_path)
-      for _, row in df.iterrows():
-        col_name = next(
-            (
-                c
-                for c in df.columns
-                if "NAME" in c.upper()
-                or "ACCESSORY" in c.upper()
-                or "ITEM" in c.upper()
-            ),
-            df.columns[0],
-        )
-        col_price = next(
-            (
-                c
-                for c in df.columns
-                if "PRICE" in c.upper()
-                or "COST" in c.upper()
-                or "AMOUNT" in c.upper()
-            ),
-            df.columns[1] if len(df.columns) > 1 else None,
-        )
-        col_vat = next(
-            (c for c in df.columns if "VAT" in c.upper() or "TAX" in c.upper()),
-            None,
-        )
+      df.columns = [str(c).strip().upper() for c in df.columns]
 
-        item_name = str(row[col_name]).strip()
+      col_name = next(
+          (
+              c
+              for c in df.columns
+              if any(k in c for k in ["NAME", "ACCESSORY", "ITEM", "DESC"])
+          ),
+          df.columns[0],
+      )
+      col_price = next(
+          (
+              c
+              for c in df.columns
+              if any(k in c for k in ["PRICE", "COST", "AMOUNT", "AED"])
+          ),
+          df.columns[1] if len(df.columns) > 1 else None,
+      )
+      col_vat = next(
+          (c for c in df.columns if "VAT" in c or "TAX" in c),
+          None,
+      )
+
+      for _, row in df.iterrows():
+        raw_item_name = row[col_name]
+        if pd.isna(raw_item_name):
+          continue
+
+        item_name = str(raw_item_name).strip()
         if not item_name or item_name.lower() == "nan":
           continue
 
         try:
-          price = float(row[col_price]) if col_price else 0.0
+          price = (
+              float(row[col_price])
+              if col_price and pd.notna(row[col_price])
+              else 0.0
+          )
         except (ValueError, TypeError):
           price = 0.0
 
         is_vat = True
         if col_vat and pd.notna(row[col_vat]):
           vat_str = str(row[col_vat]).strip().upper()
-          if vat_str in ["NO", "FALSE", "0", "EXEMPT", "N"]:
+          if vat_str in ["NO", "FALSE", "0", "EXEMPT", "N", "EXCLUDED"]:
             is_vat = False
 
         accessories_dict[item_name] = {"price": price, "vat_taxable": is_vat}
