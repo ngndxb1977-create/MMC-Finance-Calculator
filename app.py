@@ -187,9 +187,8 @@ def load_accessories_master(file_path):
     acc_catalog = {}
     if os.path.exists(file_path):
         try:
-            df_acc = pd.read_excel(file_path) # Adjust sheet_name or reader if CSV/Excel format varies
+            df_acc = pd.read_excel(file_path)
             for _, row in df_acc.iterrows():
-                # Assumes columns are named 'Accessory Name' and 'Price'
                 name = str(row.iloc[0]).strip()
                 price = float(row.iloc[1]) if pd.notna(row.iloc[1]) else 0.0
                 if name and name != "nan":
@@ -261,7 +260,7 @@ def load_all_vehicle_data(vehicle_file_path):
 
 FILE_VEHICLES = "NFC New VRI Project (2) (2).xlsx"
 FILE_SUPPLEMENT = "Bank & RMC Details.xlsx"
-FILE_ACCESSORIES = "Accessories_List.xlsx" # Make sure file name matches your repository filename
+FILE_ACCESSORIES = "Accessories_List.xlsx"
 
 VEHICLE_IMAGES = {
     "Attrage": "attrage.png.png",
@@ -355,7 +354,6 @@ else:
         rmc_selected_cost = 0.0
         checked_addons_list = []
         
-        # Multi-select dropdown implementation for uploaded Accessories_List
         if EXTERNAL_ACCESSORIES_CATALOG:
             acc_options = list(EXTERNAL_ACCESSORIES_CATALOG.keys())
             selected_accessories = st.multiselect(
@@ -369,7 +367,6 @@ else:
                 checked_addons_list.append({"name": acc, "price": price, "vat_taxable": True})
         else:
             st.info("Accessories_List file not found or empty. Fallback to standard sheet config.")
-            # Fallback legacy checks if file is missing
             for name, info in v_data["accessories"].items():
                 if info["type_tag"] == "STANDARD":
                     display_name = name
@@ -378,7 +375,6 @@ else:
                         acc_selected_price += info["price_raw"]
                         checked_addons_list.append({"name": display_name, "price": info["price_raw"], "vat_taxable": True})
 
-        # RMC handling
         override_rmc_active = (RMC_RULES and selected_code in RMC_RULES)
         if override_rmc_active:
             rmc_packages = ["None"] + list(RMC_RULES[selected_code].keys())
@@ -571,10 +567,269 @@ elif st.session_state.view_state == "summary":
     """, unsafe_allow_html=True)
     
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==========================================
+    # GENERATE PRINT-READY PDF/PRINT HTML REPORT
+    # ==========================================
+    img_html = f'<img src="{img_b64}" class="vehicle-img" alt="Vehicle Image"/>' if img_b64 else ""
     
+    vehicle_emi_rows = "".join([
+        f"<tr><td>{r['Asset Term (Years)']}</td><td>{r['Flat ROI %']}</td><td>{r['Principal Loan Block']}</td><td>{r['Total Interest Accrued']}</td><td><strong>{r['Monthly Vehicle EMI']}</strong></td></tr>"
+        for r in vehicle_emi_results
+    ])
+    
+    dp_emi_rows = ""
+    if dp_results:
+        dp_emi_rows = "<h3>Down Payment Loan Financing Options</h3><table><thead><tr><th>Term</th><th>Financed Balance</th><th>Total Interest</th><th>Monthly EMI</th></tr></thead><tbody>" + "".join([
+            f"<tr><td>{r['Term']}</td><td>{r['Financed Balance']}</td><td>{r['Total Interest']}</td><td><strong>{r['Monthly EMI']}</strong></td></tr>"
+            for r in dp_results
+        ]) + "</tbody></table>"
+        
+    addons_rows = ""
+    if addons_table_data:
+        addons_rows = "".join([
+            f"<tr><td>{r['Selected Accessories / Services']}</td><td>{r['Individual Price (Base)']}</td><td>{r['VAT Amount (5%)']}</td><td><strong>{r['Total Cost (incl. VAT)']}</strong></td></tr>"
+            for r in addons_table_data
+        ])
+    else:
+        addons_rows = '<tr><td colspan="4">No optional accessories selected.</td></tr>'
+        
+    cash_outlay_detail = ""
+    if finance_dp_option:
+        cash_outlay_detail = f"""
+        <p><strong>Showroom Reservation Fee:</strong> {v_data['reservation_fee']:,.2f} AED (Paid Upfront)</p>
+        <p><strong>Remaining Down Payment Balance:</strong> {max(0.0, calculated_downpayment - v_data['reservation_fee']):,.2f} AED (Financed via Loan Plan)</p>
+        """
+    else:
+        cash_outlay_detail = f"<p><strong>Full Down Payment Amount:</strong> {calculated_downpayment:,.2f} AED (Upfront Out-of-Pocket)</p>"
+
+    html_report = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Mitsubishi Financial Matrix Report</title>
+<style>
+@import url('https://fonts.googleapis.com/css?family=Quicksand:wght@600;700&family=Amethysta&display=swap');
+body {{
+    font-family: 'Amethysta', serif;
+    color: #191919;
+    background-color: #FFFFFF;
+    padding: 20px;
+    line-height: 1.5;
+}}
+.header {{
+    border-bottom: 3px solid #191919;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}}
+h1 {{
+    font-family: 'Quicksand', sans-serif;
+    font-size: 26px;
+    margin: 0 0 5px 0;
+    color: #191919;
+}}
+h2 {{
+    font-family: 'Quicksand', sans-serif;
+    font-size: 18px;
+    color: #383838;
+    margin: 20px 0 10px 0;
+    border-bottom: 1px solid #DDD;
+    padding-bottom: 5px;
+}}
+h3 {{
+    font-family: 'Quicksand', sans-serif;
+    font-size: 15px;
+    color: #555555;
+    margin: 15px 0 8px 0;
+}}
+.top-container {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}}
+.vehicle-img {{
+    max-width: 320px;
+    height: auto;
+    border-radius: 6px;
+}}
+.summary-cards {{
+    display: flex;
+    gap: 15px;
+    margin-bottom: 20px;
+}}
+.card {{
+    flex: 1;
+    background: #F4F0EA;
+    padding: 12px 15px;
+    border-radius: 6px;
+    border-left: 4px solid #191919;
+}}
+.card-label {{
+    font-family: 'Quicksand', sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #555;
+    font-weight: 700;
+}}
+.card-value {{
+    font-size: 18px;
+    font-weight: bold;
+    margin-top: 5px;
+}}
+table {{
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 13px;
+}}
+th, td {{
+    border: 1px solid #DDDDDD;
+    padding: 8px 10px;
+    text-align: left;
+}}
+th {{
+    background-color: #F4F0EA;
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+}}
+.cash-box {{
+    background-color: #F4F0EA;
+    padding: 15px;
+    border-radius: 6px;
+    border-left: 4px solid #191919;
+    margin-top: 15px;
+}}
+.cash-title {{
+    font-family: 'Quicksand', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #555;
+}}
+.cash-val {{
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 5px;
+}}
+.checklist {{
+    background-color: #F4F0EA;
+    padding: 15px 20px;
+    border-radius: 6px;
+    border-left: 4px solid #191919;
+    font-size: 12px;
+}}
+.checklist ul {{
+    margin: 5px 0 0 0;
+    padding-left: 20px;
+}}
+.print-btn {{
+    background-color: #191919;
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    font-family: 'Quicksand', sans-serif;
+    font-weight: bold;
+    cursor: pointer;
+    margin-bottom: 20px;
+}}
+@media print {{
+    .no-print {{ display: none; }}
+    body {{ padding: 0; }}
+}}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">🖨️ Print/Save as PDF</button>
+<div class="header">
+    <h1>Mitsubishi Financial Matrix Report</h1>
+    <p style="margin: 0; font-size: 14px; color: #555;">Unit Selected: <strong>{selected_name} - Variant {selected_code} ({selected_year})</strong></p>
+</div>
+<div class="top-container">
+    <div>
+        <p><strong>Institution:</strong> {selected_bank}</p>
+        <p><strong>Flat Interest Rate (ROI):</strong> {bank_rate*100:.4f}%</p>
+        <p><strong>Base Vehicle Price:</strong> {base_vehicle_price:,.2f} AED</p>
+    </div>
+    <div>
+        {img_html}
+    </div>
+</div>
+<h2>1. Financial Overview</h2>
+<div class="summary-cards">
+    <div class="card">
+        <div class="card-label">Total Vehicle Value</div>
+        <div class="card-value">{full_vehicle_value_including_addons:,.2f} AED</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Gross Down Payment Req.</div>
+        <div class="card-value">{calculated_downpayment:,.2f} AED</div>
+    </div>
+    <div class="card">
+        <div class="card-label">Vehicle Finance Amount</div>
+        <div class="card-value">{finance_amount:,.2f} AED</div>
+    </div>
+</div>
+<h2>2. Loan Installment Breakdowns</h2>
+<h3>Primary Asset Vehicle Financing</h3>
+<table>
+    <thead>
+        <tr>
+            <th>Asset Term (Years)</th>
+            <th>Flat ROI %</th>
+            <th>Principal Loan Block</th>
+            <th>Total Interest Accrued</th>
+            <th>Monthly Vehicle EMI</th>
+        </tr>
+    </thead>
+    <tbody>
+        {vehicle_emi_rows}
+    </tbody>
+</table>
+{dp_emi_rows}
+<h2>3. Accessories Breakdown</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Selected Accessories / Services</th>
+            <th>Individual Price (Base)</th>
+            <th>VAT Amount (5%)</th>
+            <th>Total Cost (incl. VAT)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {addons_rows}
+    </tbody>
+</table>
+<h2>4. Out-of-Pocket Cash Outlay Summary</h2>
+{cash_outlay_detail}
+<p><strong>Registration Documentation Fee:</strong> {registration_fee:,.2f} AED</p>
+<p><strong>DP Processing Fee (DP PF):</strong> {dp_processing_fee:,.2f} AED</p>
+<p><strong>Bank Processing Fee (Bank PF):</strong> {bank_processing_fee:,.2f} AED</p>
+<div class="cash-box">
+    <div class="cash-title">Actual Upfront Cash Required at Showroom Handover</div>
+    <div class="cash-val">{grand_total_cash_outlay:,.2f} AED</div>
+</div>
+<h2>5. Application Requirements & Disclosures</h2>
+<div class="checklist">
+    <strong>Required Documentation Checklist:</strong>
+    <ul>
+        <li>Passport Copy, Digital Visa & Address Page For Indian Passport, Page #44 For Philippines Passport.</li>
+        <li>Emirates ID Card Copy Both Sides.</li>
+        <li>Labour Card / Free Zone / Employer ID.</li>
+        <li>Copy of the UAE Driver's License Both Sides.</li>
+        <li>Current Dated Salary Certificate from The Employer.</li>
+        <li>Pay Slips For The Last 3 Months - [If Variance In Salary].</li>
+        <li>IBAN.</li>
+    </ul>
+</div>
+</body>
+</html>"""
+
     col_space_left, col_btn1, col_btn2, col_btn3, col_space_right = st.columns([1, 2, 2, 2, 1])
     with col_btn1:
-        if st.button("Back to Input", use_container_width=True):
+        if st.button("⬅️ Back to Input", use_container_width=True):
             st.session_state.view_state = "input"
             st.rerun()
     with col_btn2:
@@ -582,9 +837,17 @@ elif st.session_state.view_state == "summary":
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
             pd.DataFrame(vehicle_emi_results).to_excel(writer, index=False, sheet_name="Vehicle Loan Matrix")
         st.download_button(
-            label="Save Excel",
+            label="📥 Save Excel",
             data=buffer.getvalue(),
             file_name=f"{selected_name.replace(' ', '_')}_Summary.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+    with col_btn3:
+        st.download_button(
+            label="📥 Download HTML PDF/Print",
+            data=html_report,
+            file_name=f"{selected_name.replace(' ', '_')}_Financial_Report.html",
+            mime="text/html",
             use_container_width=True
         )
