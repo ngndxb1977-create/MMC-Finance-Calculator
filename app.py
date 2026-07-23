@@ -713,8 +713,7 @@ else:
         if st.button("Generate Summary", use_container_width=True):
             st.session_state.view_state = "summary"
 
-
-    # ==========================================
+# ==========================================
 # HTML/PDF REPORT GENERATOR FUNCTION
 # ==========================================
 def generate_html_report(
